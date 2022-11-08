@@ -25,10 +25,10 @@ def train(env_id, num_timesteps, seed):
         return cnn_policy.CnnPolicy(name=name, ob_space=ob_space, ac_space=ac_space)
     env = bench.Monitor(env, logger.get_dir() and
         osp.join(logger.get_dir(), str(rank)))
-    env.seed(workerseed)
+    env.reset(seed=workerseed)
 
     env = wrap_deepmind(env)
-    env.seed(workerseed)
+    env.reset(seed=workerseed)
 
     pposgd_simple.learn(env, policy_fn,
         max_timesteps=int(num_timesteps * 1.1),

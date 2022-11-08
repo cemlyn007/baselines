@@ -1,4 +1,6 @@
 from collections import deque
+from typing import Tuple
+
 import cv2
 cv2.ocl.setUseOpenCL(False)
 from .atari_wrappers import WarpFrame, ClipRewardEnv, FrameStack, ScaledFloatFrame
@@ -61,11 +63,11 @@ class PartialFrameStack(gym.Wrapper):
         shp = env.observation_space.shape
 
     def reset(self):
-        ob = self.env.reset()
+        ob, info = self.env.reset()
         assert ob.shape[2] > self.channel
         for _ in range(self.k):
             self.frames.append(ob)
-        return self._get_ob()
+        return self._get_ob(), info
 
     def step(self, ac):
         ob, reward, done, info = self.env.step(ac)
@@ -177,27 +179,28 @@ class StartDoingRandomActionsWrapper(gym.Wrapper):
         self.every_episode = every_episode
         self.random_steps = max_random_steps
         self.last_obs = None
+        self.last_info = {}
         if on_startup:
             self.some_random_steps()
 
     def some_random_steps(self):
-        self.last_obs = self.env.reset()
+        self.last_obs, self.last_info = self.env.reset()
         n = np.random.randint(self.random_steps)
         #print("running for random %i frames" % n)
         for _ in range(n):
-            self.last_obs, _, done, _ = self.env.step(self.env.action_space.sample())
-            if done: self.last_obs = self.env.reset()
+            self.last_obs, _, terminated, truncated, self.last_info = self.env.step(self.env.action_space.sample())
+            if terminated or truncated: self.last_obs, self.last_info = self.env.reset()
 
-    def reset(self):
-        return self.last_obs
+    def reset(self) -> Tuple[gym.core.ObsType, dict]:
+        return self.last_obs, self.last_info
 
     def step(self, a):
-        self.last_obs, rew, done, info = self.env.step(a)
-        if done:
-            self.last_obs = self.env.reset()
+        self.last_obs, rew, terminated, truncated, self.last_info = self.env.step(a)
+        if terminated or truncated:
+            self.last_obs, self.last_info = self.env.reset()
             if self.every_episode:
                 self.some_random_steps()
-        return self.last_obs, rew, done, info
+        return self.last_obs, rew, terminated, truncated, self.last_info
 
 def make_retro(*, game, state=None, max_episode_steps=4500, **kwargs):
     import retro

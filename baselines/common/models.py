@@ -40,7 +40,7 @@ def build_impala_cnn(unscaled_images, depths=[16,32,32], **conv_kwargs):
         return num_str
 
     def conv_layer(out, depth):
-        return tf.layers.conv2d(out, depth, 3, padding='same', name='layer_' + get_layer_num_str())
+        return tf.compat.v1.layers.conv2d(out, depth, 3, padding='same', name='layer_' + get_layer_num_str())
 
     def residual_block(inputs):
         depth = inputs.get_shape()[-1].value
@@ -54,7 +54,7 @@ def build_impala_cnn(unscaled_images, depths=[16,32,32], **conv_kwargs):
 
     def conv_sequence(inputs, depth):
         out = conv_layer(inputs, depth)
-        out = tf.layers.max_pooling2d(out, pool_size=3, strides=2, padding='same')
+        out = tf.compat.v1.layers.max_pooling2d(out, pool_size=3, strides=2, padding='same')
         out = residual_block(out)
         out = residual_block(out)
         return out
@@ -64,9 +64,9 @@ def build_impala_cnn(unscaled_images, depths=[16,32,32], **conv_kwargs):
     for depth in depths:
         out = conv_sequence(out, depth)
 
-    out = tf.layers.flatten(out)
+    out = tf.compat.v1.layers.flatten(out)
     out = tf.nn.relu(out)
-    out = tf.layers.dense(out, 256, activation=tf.nn.relu, name='layer_' + get_layer_num_str())
+    out = tf.compat.v1.layers.dense(out, 256, activation=tf.nn.relu, name='layer_' + get_layer_num_str())
 
     return out
 
@@ -91,11 +91,11 @@ def mlp(num_layers=2, num_hidden=64, activation=tf.tanh, layer_norm=False):
     function that builds fully connected network with a given input tensor / placeholder
     """
     def network_fn(X):
-        h = tf.layers.flatten(X)
+        h = tf.compat.v1.layers.flatten(X)
         for i in range(num_layers):
             h = fc(h, 'mlp_fc{}'.format(i), nh=num_hidden, init_scale=np.sqrt(2))
             if layer_norm:
-                h = tf.contrib.layers.layer_norm(h, center=True, scale=True)
+                h = tf.compat.v1.layers.layer_norm(h, center=True, scale=True)
             h = activation(h)
 
         return h
@@ -162,10 +162,10 @@ def lstm(nlstm=128, layer_norm=False):
         nbatch = X.shape[0]
         nsteps = nbatch // nenv
 
-        h = tf.layers.flatten(X)
+        h = tf.compat.v1.layers.flatten(X)
 
-        M = tf.placeholder(tf.float32, [nbatch]) #mask (done t-1)
-        S = tf.placeholder(tf.float32, [nenv, 2*nlstm]) #states
+        M = tf.compat.v1.placeholder(tf.float32, [nbatch]) #mask (done t-1)
+        S = tf.compat.v1.placeholder(tf.float32, [nenv, 2*nlstm]) #states
 
         xs = batch_to_seq(h, nenv, nsteps)
         ms = batch_to_seq(M, nenv, nsteps)
@@ -191,8 +191,8 @@ def cnn_lstm(nlstm=128, layer_norm=False, conv_fn=nature_cnn, **conv_kwargs):
 
         h = conv_fn(X, **conv_kwargs)
 
-        M = tf.placeholder(tf.float32, [nbatch]) #mask (done t-1)
-        S = tf.placeholder(tf.float32, [nenv, 2*nlstm]) #states
+        M = tf.compat.v1.placeholder(tf.float32, [nbatch]) #mask (done t-1)
+        S = tf.compat.v1.placeholder(tf.float32, [nenv, 2*nlstm]) #states
 
         xs = batch_to_seq(h, nenv, nsteps)
         ms = batch_to_seq(M, nenv, nsteps)
@@ -236,14 +236,14 @@ def conv_only(convs=[(32, 8, 4), (64, 4, 2), (64, 3, 1)], **conv_kwargs):
 
     def network_fn(X):
         out = tf.cast(X, tf.float32) / 255.
-        with tf.variable_scope("convnet"):
+        with tf.compat.v1.variable_scope("convnet"):
             for num_outputs, kernel_size, stride in convs:
-                out = tf.contrib.layers.convolution2d(out,
-                                           num_outputs=num_outputs,
-                                           kernel_size=kernel_size,
-                                           stride=stride,
-                                           activation_fn=tf.nn.relu,
-                                           **conv_kwargs)
+                out = tf.compat.v1.layers.conv2d(out,
+                                                 num_outputs,
+                                                 kernel_size=kernel_size,
+                                                 strides=stride,
+                                                 activation=tf.nn.relu,
+                                                 **conv_kwargs)
 
         return out
     return network_fn

@@ -30,8 +30,7 @@ except ImportError:
     roboschool = None
 
 _game_envs = defaultdict(set)
-for env in gym.envs.registry.all():
-    # TODO: solve this with regexes
+for env in gym.envs.registry.values():
     env_type = env.entry_point.split(':')[0].split('.')[-1]
     _game_envs[env_type].add(env.id)
 
@@ -103,7 +102,7 @@ def build_env(args):
             env = VecFrameStack(env, frame_stack_size)
 
     else:
-        config = tf.ConfigProto(allow_soft_placement=True,
+        config = tf.compat.v1.ConfigProto(allow_soft_placement=True,
                                intra_op_parallelism_threads=1,
                                inter_op_parallelism_threads=1)
         config.gpu_options.allow_growth = True
@@ -125,7 +124,7 @@ def get_env_type(args):
         return args.env_type, env_id
 
     # Re-parse the gym registry, since we could have new envs since last time.
-    for env in gym.envs.registry.all():
+    for env in gym.envs.registry.values():
         env_type = env.entry_point.split(':')[0].split('.')[-1]
         _game_envs[env_type].add(env.id)  # This is a set so add is idempotent
 
@@ -153,13 +152,7 @@ def get_default_network(env_type):
 
 def get_alg_module(alg, submodule=None):
     submodule = submodule or alg
-    try:
-        # first try to import the alg module from baselines
-        alg_module = import_module('.'.join(['baselines', alg, submodule]))
-    except ImportError:
-        # then from rl_algs
-        alg_module = import_module('.'.join(['rl_' + 'algs', alg, submodule]))
-
+    alg_module = import_module('.'.join(['baselines', alg, submodule]))
     return alg_module
 
 
@@ -221,7 +214,7 @@ def main(args):
 
     if args.play:
         logger.log("Running trained model")
-        obs = env.reset()
+        obs, _ = env.reset()
 
         state = model.initial_state if hasattr(model, 'initial_state') else None
         dones = np.zeros((1,))

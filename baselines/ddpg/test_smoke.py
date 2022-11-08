@@ -1,6 +1,6 @@
 from baselines.common.tests.util import smoketest
 def _run(argstr):
-    smoketest('--alg=ddpg --env=Pendulum-v0 --num_timesteps=0 ' + argstr)
+    smoketest('--alg=ddpg --env=Pendulum-v1 --num_timesteps=0 ' + argstr)
 
 def test_popart():
     _run('--normalize_returns=True --popart=True')

@@ -1,8 +1,10 @@
 """
 An interface for asynchronous vectorized environments.
 """
-
+import ast
 import multiprocessing as mp
+from typing import Iterable, Tuple
+
 import numpy as np
 from .vec_env import VecEnv, CloudpickleWrapper, clear_mpi_env_vars
 import ctypes
@@ -22,34 +24,31 @@ class ShmemVecEnv(VecEnv):
     Optimized version of SubprocVecEnv that uses shared variables to communicate observations.
     """
 
-    def __init__(self, env_fns, spaces=None, context='spawn'):
-        """
-        If you don't specify observation_space, we'll have to create a dummy
-        environment to get it.
-        """
+    def __init__(self, env_fns, context='spawn'):
         ctx = mp.get_context(context)
-        if spaces:
-            observation_space, action_space = spaces
-        else:
-            logger.log('Creating dummy env object to get spaces')
-            with logger.scoped_configure(format_strs=[]):
-                dummy = env_fns[0]()
-                observation_space, action_space = dummy.observation_space, dummy.action_space
-                dummy.close()
-                del dummy
+        logger.log('Creating dummy env object to get spaces')
+        with logger.scoped_configure(format_strs=[]):
+            dummy = env_fns[0]()
+            self.render_mode = dummy.render_mode
+            observation_space, action_space = dummy.observation_space, dummy.action_space
+            dummy.close()
+            del dummy
         VecEnv.__init__(self, len(env_fns), observation_space, action_space)
         self.obs_keys, self.obs_shapes, self.obs_dtypes = obs_space_info(observation_space)
         self.obs_bufs = [
             {k: ctx.Array(_NP_TO_CT[self.obs_dtypes[k].type], int(np.prod(self.obs_shapes[k]))) for k in self.obs_keys}
-            for _ in env_fns]
+            for _ in env_fns
+        ]
         self.parent_pipes = []
         self.procs = []
         with clear_mpi_env_vars():
             for env_fn, obs_buf in zip(env_fns, self.obs_bufs):
                 wrapped_fn = CloudpickleWrapper(env_fn)
                 parent_pipe, child_pipe = ctx.Pipe()
-                proc = ctx.Process(target=_subproc_worker,
-                            args=(child_pipe, parent_pipe, wrapped_fn, obs_buf, self.obs_shapes, self.obs_dtypes, self.obs_keys))
+                proc = ctx.Process(
+                    target=_subproc_worker,
+                    args=(child_pipe, parent_pipe, wrapped_fn, obs_buf, self.obs_shapes, self.obs_dtypes, self.obs_keys)
+                )
                 proc.daemon = True
                 self.procs.append(proc)
                 self.parent_pipes.append(parent_pipe)
@@ -64,7 +63,9 @@ class ShmemVecEnv(VecEnv):
             self.step_wait()
         for pipe in self.parent_pipes:
             pipe.send(('reset', None))
-        return self._decode_obses([pipe.recv() for pipe in self.parent_pipes])
+        outs = [pipe.recv() for pipe in self.parent_pipes]
+        _, infos = zip(*outs)
+        return self._decode_obses(), infos
 
     def step_async(self, actions):
         assert len(actions) == len(self.parent_pipes)
@@ -75,8 +76,8 @@ class ShmemVecEnv(VecEnv):
     def step_wait(self):
         outs = [pipe.recv() for pipe in self.parent_pipes]
         self.waiting_step = False
-        obs, rews, dones, infos = zip(*outs)
-        return self._decode_obses(obs), np.array(rews), np.array(dones), infos
+        _, rews, terminateds, truncateds, infos = zip(*outs)
+        return self._decode_obses(), np.array(rews), np.array(terminateds), np.array(truncateds), infos
 
     def close_extras(self):
         if self.waiting_step:
@@ -89,15 +90,14 @@ class ShmemVecEnv(VecEnv):
         for proc in self.procs:
             proc.join()
 
-    def get_images(self, mode='human'):
+    def get_images(self):
         for pipe in self.parent_pipes:
             pipe.send(('render', None))
         return [pipe.recv() for pipe in self.parent_pipes]
 
-    def _decode_obses(self, obs):
+    def _decode_obses(self):
         result = {}
         for k in self.obs_keys:
-
             bufs = [b[k] for b in self.obs_bufs]
             o = [np.frombuffer(b.get_obj(), dtype=self.obs_dtypes[k]).reshape(self.obs_shapes[k]) for b in bufs]
             result[k] = np.array(o)
@@ -122,14 +122,15 @@ def _subproc_worker(pipe, parent_pipe, env_fn_wrapper, obs_bufs, obs_shapes, obs
         while True:
             cmd, data = pipe.recv()
             if cmd == 'reset':
-                pipe.send(_write_obs(env.reset()))
+                obs, info = env.reset()
+                pipe.send((_write_obs(obs), info))
             elif cmd == 'step':
-                obs, reward, done, info = env.step(data)
-                if done:
-                    obs = env.reset()
-                pipe.send((_write_obs(obs), reward, done, info))
+                obs, reward, terminated, truncated, info = env.step(data)
+                if terminated or truncated:
+                    obs, _ = env.reset()
+                pipe.send((_write_obs(obs), reward, terminated, truncated, info))
             elif cmd == 'render':
-                pipe.send(env.render(mode='rgb_array'))
+                pipe.send(env.render())
             elif cmd == 'close':
                 pipe.send(None)
                 break

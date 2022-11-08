@@ -78,7 +78,7 @@ def main(args):
                                     reuse=reuse, hid_size=args.policy_hidden_size, num_hid_layers=2)
     env = bench.Monitor(env, logger.get_dir() and
                         osp.join(logger.get_dir(), "monitor.json"))
-    env.seed(args.seed)
+    env.reset(seed=args.seed)
     gym.logger.setLevel(logging.WARN)
     task_name = get_task_name(args)
     args.checkpoint_dir = osp.join(args.checkpoint_dir, task_name)
@@ -137,7 +137,7 @@ def train(env, seed, policy_fn, reward_giver, dataset, algo,
             logger.set_level(logger.DISABLED)
         workerseed = seed + 10000 * MPI.COMM_WORLD.Get_rank()
         set_global_seeds(workerseed)
-        env.seed(workerseed)
+        env.reset(seed=workerseed)
         trpo_mpi.learn(env, policy_fn, reward_giver, dataset, rank,
                        pretrained=pretrained, pretrained_weight=pretrained_weight,
                        g_step=g_step, d_step=d_step,
@@ -200,7 +200,7 @@ def traj_1_generator(pi, env, horizon, stochastic):
     ac = env.action_space.sample()  # not used, just so we have the datatype
     new = True  # marks if we're on first timestep of an episode
 
-    ob = env.reset()
+    ob, _ = env.reset()
     cur_ep_ret = 0  # return in current episode
     cur_ep_len = 0  # len of current episode
 

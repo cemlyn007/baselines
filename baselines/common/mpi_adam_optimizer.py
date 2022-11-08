@@ -8,15 +8,15 @@ try:
 except ImportError:
     MPI = None
 
-class MpiAdamOptimizer(tf.train.AdamOptimizer):
+class MpiAdamOptimizer(tf.compat.v1.train.AdamOptimizer):
     """Adam optimizer that averages gradients across mpi processes."""
     def __init__(self, comm, grad_clip=None, mpi_rank_weight=1, **kwargs):
         self.comm = comm
         self.grad_clip = grad_clip
         self.mpi_rank_weight = mpi_rank_weight
-        tf.train.AdamOptimizer.__init__(self, **kwargs)
+        tf.compat.v1.train.AdamOptimizer.__init__(self, **kwargs)
     def compute_gradients(self, loss, var_list, **kwargs):
-        grads_and_vars = tf.train.AdamOptimizer.compute_gradients(self, loss, var_list, **kwargs)
+        grads_and_vars = tf.compat.v1.train.AdamOptimizer.compute_gradients(self, loss, var_list, **kwargs)
         grads_and_vars = [(g, v) for g, v in grads_and_vars if g is not None]
         flat_grad = tf.concat([tf.reshape(g, (-1,)) for g, v in grads_and_vars], axis=0) * self.mpi_rank_weight
         shapes = [v.shape.as_list() for g, v in grads_and_vars]
@@ -28,7 +28,7 @@ class MpiAdamOptimizer(tf.train.AdamOptimizer):
 
         buf = np.zeros(sum(sizes), np.float32)
         countholder = [0] # Counts how many times _collect_grads has been called
-        stat = tf.reduce_sum(grads_and_vars[0][1]) # sum of first variable
+        stat = tf.reduce_sum(input_tensor=grads_and_vars[0][1]) # sum of first variable
         def _collect_grads(flat_grad, np_stat):
             if self.grad_clip is not None:
                 gradnorm = np.linalg.norm(flat_grad)
@@ -43,7 +43,7 @@ class MpiAdamOptimizer(tf.train.AdamOptimizer):
             countholder[0] += 1
             return buf
 
-        avg_flat_grad = tf.py_func(_collect_grads, [flat_grad, stat], tf.float32)
+        avg_flat_grad = tf.compat.v1.py_func(_collect_grads, [flat_grad, stat], tf.float32)
         avg_flat_grad.set_shape(flat_grad.shape)
         avg_grads = tf.split(avg_flat_grad, sizes, axis=0)
         avg_grads_and_vars = [(tf.reshape(g, v.shape), v)
@@ -70,19 +70,19 @@ def check_synced(localval, comm=None):
 @with_mpi(timeout=5)
 def test_nonfreeze():
     np.random.seed(0)
-    tf.set_random_seed(0)
+    tf.compat.v1.set_random_seed(0)
 
     a = tf.Variable(np.random.randn(3).astype('float32'))
     b = tf.Variable(np.random.randn(2,5).astype('float32'))
-    loss = tf.reduce_sum(tf.square(a)) + tf.reduce_sum(tf.sin(b))
+    loss = tf.reduce_sum(input_tensor=tf.square(a)) + tf.reduce_sum(input_tensor=tf.sin(b))
 
     stepsize = 1e-2
     # for some reason the session config with inter_op_parallelism_threads was causing
     # nested sess.run calls to freeze
-    config = tf.ConfigProto(inter_op_parallelism_threads=1)
+    config = tf.compat.v1.ConfigProto(inter_op_parallelism_threads=1)
     sess = U.get_session(config=config)
     update_op = MpiAdamOptimizer(comm=MPI.COMM_WORLD, learning_rate=stepsize).minimize(loss)
-    sess.run(tf.global_variables_initializer())
+    sess.run(tf.compat.v1.global_variables_initializer())
     losslist_ref = []
     for i in range(100):
         l,_ = sess.run([loss, update_op])

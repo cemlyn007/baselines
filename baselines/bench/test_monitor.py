@@ -8,12 +8,13 @@ def test_monitor():
     import uuid
 
     env = gym.make("CartPole-v1")
-    env.seed(0)
+    env.reset(seed=0)
     mon_file = "/tmp/baselines-test-%s.monitor.csv" % uuid.uuid4()
     menv = Monitor(env, mon_file)
     menv.reset()
     for _ in range(1000):
-        _, _, done, _ = menv.step(0)
+        _, _, terminated, truncated, _ = menv.step(0)
+        done = terminated or truncated
         if done:
             menv.reset()
 

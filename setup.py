@@ -12,9 +12,9 @@ extras = {
         'filelock',
         'pytest',
         'pytest-forked',
-        'atari-py',
         'matplotlib',
-        'pandas'
+        'pandas',
+        'git+https://github.com/cemlyn007/Arcade-Learning-Environment'
     ],
     'mpi': [
         'mpi4py'
@@ -31,13 +31,14 @@ setup(name='baselines',
       packages=[package for package in find_packages()
                 if package.startswith('baselines')],
       install_requires=[
-          'gym>=0.15.4, <0.16.0',
+          'gym',
           'scipy',
           'tqdm',
           'joblib',
           'cloudpickle',
           'click',
-          'opencv-python'
+          'opencv-python',
+          'filelock'
       ],
       extras_require=extras,
       description='OpenAI baselines: high quality implementations of reinforcement learning algorithms',

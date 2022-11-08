@@ -6,10 +6,10 @@ from .vec_env import VecEnv, CloudpickleWrapper, clear_mpi_env_vars
 
 def worker(remote, parent_remote, env_fn_wrappers):
     def step_env(env, action):
-        ob, reward, done, info = env.step(action)
-        if done:
-            ob = env.reset()
-        return ob, reward, done, info
+        ob, reward, terminated, truncated, info = env.step(action)
+        if terminated or truncated:
+            ob, _ = env.reset()
+        return ob, reward, terminated, truncated, info
 
     parent_remote.close()
     envs = [env_fn_wrapper() for env_fn_wrapper in env_fn_wrappers.x]
@@ -21,7 +21,7 @@ def worker(remote, parent_remote, env_fn_wrappers):
             elif cmd == 'reset':
                 remote.send([env.reset() for env in envs])
             elif cmd == 'render':
-                remote.send([env.render(mode='rgb_array') for env in envs])
+                remote.send([env.render() for env in envs])
             elif cmd == 'close':
                 remote.close()
                 break
@@ -69,6 +69,15 @@ class SubprocVecEnv(VecEnv):
 
         self.remotes[0].send(('get_spaces_spec', None))
         observation_space, action_space, self.spec = self.remotes[0].recv().x
+
+        def get_render_mode() -> str:
+            env = env_fns[0][0]()
+            try:
+                return env.render_mode
+            finally:
+                env.close()
+
+        self.render_mode = get_render_mode()
         self.viewer = None
         VecEnv.__init__(self, nenvs, observation_space, action_space)
 
@@ -84,16 +93,17 @@ class SubprocVecEnv(VecEnv):
         results = [remote.recv() for remote in self.remotes]
         results = _flatten_list(results)
         self.waiting = False
-        obs, rews, dones, infos = zip(*results)
-        return _flatten_obs(obs), np.stack(rews), np.stack(dones), infos
+        obs, rews, terminateds, truncateds, infos = zip(*results)
+        return _flatten_obs(obs), np.stack(rews), np.stack(terminateds), np.stack(truncateds), infos
 
     def reset(self):
         self._assert_not_closed()
         for remote in self.remotes:
             remote.send(('reset', None))
-        obs = [remote.recv() for remote in self.remotes]
-        obs = _flatten_list(obs)
-        return _flatten_obs(obs)
+        outs = [remote.recv() for remote in self.remotes]
+        outs = _flatten_list(outs)
+        obs, info = zip(*outs)
+        return _flatten_obs(obs), dict(enumerate(info))
 
     def close_extras(self):
         self.closed = True

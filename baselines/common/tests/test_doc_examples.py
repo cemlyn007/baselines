@@ -19,15 +19,15 @@ def test_lstm_example():
     # create vectorized environment
     venv = DummyVecEnv([lambda: cmd_util.make_mujoco_env('Reacher-v2', seed=0)])
 
-    with tf.Session() as sess:
+    with tf.compat.v1.Session() as sess:
         # build policy based on lstm network with 128 units
         policy = policies.build_policy(venv, models.lstm(128))(nbatch=1, nsteps=1)
 
         # initialize tensorflow variables
-        sess.run(tf.global_variables_initializer())
+        sess.run(tf.compat.v1.global_variables_initializer())
 
         # prepare environment variables
-        ob = venv.reset()
+        ob, _ = venv.reset()
         state = policy.initial_state
         done = [False]
         step_counter = 0
@@ -35,9 +35,9 @@ def test_lstm_example():
         # run a single episode until the end (i.e. until done)
         while True:
             action, _, state, _ = policy.step(ob, S=state, M=done)
-            ob, reward, done, _ = venv.step(action)
+            ob, reward, terminated, truncated, _ = venv.step(action)
             step_counter += 1
-            if done:
+            if terminated or truncated:
                 break
 
 

@@ -1,3 +1,6 @@
+from typing import Callable, Sequence
+
+import gym
 import numpy as np
 from .vec_env import VecEnv
 from .util import copy_obs_dict, dict_to_obs, obs_space_info
@@ -9,11 +12,11 @@ class DummyVecEnv(VecEnv):
     Useful when debugging and when num_env == 1 (in the latter case,
     avoids communication overhead)
     """
-    def __init__(self, env_fns):
+    def __init__(self, env_fns: Sequence[Callable[[], gym.Env]]):
         """
         Arguments:
 
-        env_fns: iterable of callables      functions that build environments
+        env_fns: iterable of callables functions that build environments
         """
         self.envs = [fn() for fn in env_fns]
         env = self.envs[0]
@@ -22,11 +25,13 @@ class DummyVecEnv(VecEnv):
         self.keys, shapes, dtypes = obs_space_info(obs_space)
 
         self.buf_obs = { k: np.zeros((self.num_envs,) + tuple(shapes[k]), dtype=dtypes[k]) for k in self.keys }
-        self.buf_dones = np.zeros((self.num_envs,), dtype=np.bool)
+        self.buf_terminateds = np.zeros((self.num_envs,), dtype=np.bool)
+        self.buf_truncateds = np.zeros((self.num_envs,), dtype=np.bool)
         self.buf_rews  = np.zeros((self.num_envs,), dtype=np.float32)
         self.buf_infos = [{} for _ in range(self.num_envs)]
         self.actions = None
         self.spec = self.envs[0].spec
+        self.render_mode = self.envs[0].render_mode
 
     def step_async(self, actions):
         listify = True
@@ -45,21 +50,25 @@ class DummyVecEnv(VecEnv):
     def step_wait(self):
         for e in range(self.num_envs):
             action = self.actions[e]
-            # if isinstance(self.envs[e].action_space, spaces.Discrete):
-            #    action = int(action)
-
-            obs, self.buf_rews[e], self.buf_dones[e], self.buf_infos[e] = self.envs[e].step(action)
-            if self.buf_dones[e]:
-                obs = self.envs[e].reset()
+            (obs,
+             self.buf_rews[e],
+             self.buf_terminateds[e],
+             self.buf_truncateds[e],
+             self.buf_infos[e]) = self.envs[e].step(action)
+            if self.buf_terminateds[e] or self.buf_truncateds[e]:
+                obs, _ = self.envs[e].reset()
             self._save_obs(e, obs)
-        return (self._obs_from_buf(), np.copy(self.buf_rews), np.copy(self.buf_dones),
+        return (self._obs_from_buf(),
+                np.copy(self.buf_rews),
+                np.copy(self.buf_terminateds),
+                np.copy(self.buf_truncateds),
                 self.buf_infos.copy())
 
     def reset(self):
         for e in range(self.num_envs):
-            obs = self.envs[e].reset()
+            obs, self.buf_infos[e] = self.envs[e].reset()
             self._save_obs(e, obs)
-        return self._obs_from_buf()
+        return self._obs_from_buf(), self.buf_infos.copy()
 
     def _save_obs(self, e, obs):
         for k in self.keys:
@@ -72,10 +81,13 @@ class DummyVecEnv(VecEnv):
         return dict_to_obs(copy_obs_dict(self.buf_obs))
 
     def get_images(self):
-        return [env.render(mode='rgb_array') for env in self.envs]
+        if self.envs[0].render_mode != 'rgb_array':
+            raise ValueError('Render mode must be rgb_array.')
+        # else...
+        return [env.render() for env in self.envs]
 
-    def render(self, mode='human'):
+    def render(self):
         if self.num_envs == 1:
-            return self.envs[0].render(mode=mode)
+            return self.envs[0].render()
         else:
-            return super().render(mode=mode)
+            return super().render()

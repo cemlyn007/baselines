@@ -23,7 +23,7 @@ def traj_segment_generator(pi, env, horizon, stochastic):
     ac = env.action_space.sample()
     new = True
     rew = 0.0
-    ob = env.reset()
+    ob, _ = env.reset()
 
     cur_ep_ret = 0
     cur_ep_len = 0
@@ -60,7 +60,8 @@ def traj_segment_generator(pi, env, horizon, stochastic):
         acs[i] = ac
         prevacs[i] = prevac
 
-        ob, rew, new, _ = env.step(ac)
+        ob, rew, term, trunc, _ = env.step(ac)
+        new = term or trunc
         rews[i] = rew
 
         cur_ep_ret += rew
@@ -70,7 +71,7 @@ def traj_segment_generator(pi, env, horizon, stochastic):
             ep_lens.append(cur_ep_len)
             cur_ep_ret = 0
             cur_ep_len = 0
-            ob = env.reset()
+            ob, _ = env.reset()
         t += 1
 
 def add_vtarg_and_adv(seg, gamma, lam):
@@ -158,7 +159,7 @@ def learn(*,
         rank = 0
 
     cpus_per_worker = 1
-    U.get_session(config=tf.ConfigProto(
+    U.get_session(config=tf.compat.v1.ConfigProto(
             allow_soft_placement=True,
             inter_op_parallelism_threads=cpus_per_worker,
             intra_op_parallelism_threads=cpus_per_worker
@@ -175,26 +176,26 @@ def learn(*,
     ac_space = env.action_space
 
     ob = observation_placeholder(ob_space)
-    with tf.variable_scope("pi"):
+    with tf.compat.v1.variable_scope("pi"):
         pi = policy(observ_placeholder=ob)
-    with tf.variable_scope("oldpi"):
+    with tf.compat.v1.variable_scope("oldpi"):
         oldpi = policy(observ_placeholder=ob)
 
-    atarg = tf.placeholder(dtype=tf.float32, shape=[None]) # Target advantage function (if applicable)
-    ret = tf.placeholder(dtype=tf.float32, shape=[None]) # Empirical return
+    atarg = tf.compat.v1.placeholder(dtype=tf.float32, shape=[None]) # Target advantage function (if applicable)
+    ret = tf.compat.v1.placeholder(dtype=tf.float32, shape=[None]) # Empirical return
 
     ac = pi.pdtype.sample_placeholder([None])
 
     kloldnew = oldpi.pd.kl(pi.pd)
     ent = pi.pd.entropy()
-    meankl = tf.reduce_mean(kloldnew)
-    meanent = tf.reduce_mean(ent)
+    meankl = tf.reduce_mean(input_tensor=kloldnew)
+    meanent = tf.reduce_mean(input_tensor=ent)
     entbonus = ent_coef * meanent
 
-    vferr = tf.reduce_mean(tf.square(pi.vf - ret))
+    vferr = tf.reduce_mean(input_tensor=tf.square(pi.vf - ret))
 
     ratio = tf.exp(pi.pd.logp(ac) - oldpi.pd.logp(ac)) # advantage * pnew / pold
-    surrgain = tf.reduce_mean(ratio * atarg)
+    surrgain = tf.reduce_mean(input_tensor=ratio * atarg)
 
     optimgain = surrgain + entbonus
     losses = [optimgain, meankl, entbonus, surrgain, meanent]
@@ -212,8 +213,8 @@ def learn(*,
 
     get_flat = U.GetFlat(var_list)
     set_from_flat = U.SetFromFlat(var_list)
-    klgrads = tf.gradients(dist, var_list)
-    flat_tangent = tf.placeholder(dtype=tf.float32, shape=[None], name="flat_tan")
+    klgrads = tf.gradients(ys=dist, xs=var_list)
+    flat_tangent = tf.compat.v1.placeholder(dtype=tf.float32, shape=[None], name="flat_tan")
     shapes = [var.get_shape().as_list() for var in var_list]
     start = 0
     tangents = []
@@ -221,10 +222,10 @@ def learn(*,
         sz = U.intprod(shape)
         tangents.append(tf.reshape(flat_tangent[start:start+sz], shape))
         start += sz
-    gvp = tf.add_n([tf.reduce_sum(g*tangent) for (g, tangent) in zipsame(klgrads, tangents)]) #pylint: disable=E1111
+    gvp = tf.add_n([tf.reduce_sum(input_tensor=g*tangent) for (g, tangent) in zipsame(klgrads, tangents)]) #pylint: disable=E1111
     fvp = U.flatgrad(gvp, var_list)
 
-    assign_old_eq_new = U.function([],[], updates=[tf.assign(oldv, newv)
+    assign_old_eq_new = U.function([],[], updates=[tf.compat.v1.assign(oldv, newv)
         for (oldv, newv) in zipsame(get_variables("oldpi"), get_variables("pi"))])
 
     compute_losses = U.function([ob, ac, atarg], losses)
@@ -395,10 +396,10 @@ def flatten_lists(listoflists):
     return [el for list_ in listoflists for el in list_]
 
 def get_variables(scope):
-    return tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES, scope)
+    return tf.compat.v1.get_collection(tf.compat.v1.GraphKeys.GLOBAL_VARIABLES, scope)
 
 def get_trainable_variables(scope):
-    return tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, scope)
+    return tf.compat.v1.get_collection(tf.compat.v1.GraphKeys.TRAINABLE_VARIABLES, scope)
 
 def get_vf_trainable_variables(scope):
     return [v for v in get_trainable_variables(scope) if 'vf' in v.name[len(scope):].split('/')]

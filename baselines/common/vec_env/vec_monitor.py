@@ -23,10 +23,10 @@ class VecMonitor(VecEnvWrapper):
             self.eplen_buf = deque([], maxlen=keep_buf)
 
     def reset(self):
-        obs = self.venv.reset()
+        obs, info = self.venv.reset()
         self.eprets = np.zeros(self.num_envs, 'f')
         self.eplens = np.zeros(self.num_envs, 'i')
-        return obs
+        return obs, info
 
     def step_wait(self):
         obs, rews, dones, infos = self.venv.step_wait()

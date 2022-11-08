@@ -59,9 +59,9 @@ def nn(input, layers_sizes, reuse=None, flatten=False, name=""):
     """
     for i, size in enumerate(layers_sizes):
         activation = tf.nn.relu if i < len(layers_sizes) - 1 else None
-        input = tf.layers.dense(inputs=input,
+        input = tf.compat.v1.layers.dense(inputs=input,
                                 units=size,
-                                kernel_initializer=tf.contrib.layers.xavier_initializer(),
+                                kernel_initializer=tf.compat.v1.keras.initializers.VarianceScaling(scale=1.0, mode="fan_avg", distribution="uniform"),
                                 reuse=reuse,
                                 name=name + '_' + str(i))
         if activation:

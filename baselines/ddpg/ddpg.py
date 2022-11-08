@@ -103,9 +103,9 @@ def learn(network, env,
 
     agent.reset()
 
-    obs = env.reset()
+    obs, _ = env.reset()
     if eval_env is not None:
-        eval_obs = eval_env.reset()
+        eval_obs, _ = eval_env.reset()
     nenvs = obs.shape[0]
 
     episode_reward = np.zeros(nenvs, dtype = np.float32) #vector

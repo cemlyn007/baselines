@@ -11,7 +11,7 @@ def gmatmul(a, b, transpose_a=False, transpose_b=False, reduce_dim=None):
             b_dims = list(range(len(b_shape)))
             b_dims.remove(reduce_dim)
             b_dims.insert(0, reduce_dim)
-            b = tf.transpose(b, b_dims)
+            b = tf.transpose(a=b, perm=b_dims)
         b_t_shape = b.get_shape()
         b = tf.reshape(b, [int(b_shape[reduce_dim]), -1])
         result = tf.matmul(a, b, transpose_a=transpose_a,
@@ -21,7 +21,7 @@ def gmatmul(a, b, transpose_a=False, transpose_b=False, reduce_dim=None):
             b_dims = list(range(len(b_shape)))
             b_dims.remove(0)
             b_dims.insert(reduce_dim, 0)
-            result = tf.transpose(result, b_dims)
+            result = tf.transpose(a=result, perm=b_dims)
         return result
 
     elif len(a.get_shape()) > 2 and len(b.get_shape()) == 2:
@@ -33,7 +33,7 @@ def gmatmul(a, b, transpose_a=False, transpose_b=False, reduce_dim=None):
             a_dims = list(range(len(a_shape)))
             a_dims.remove(reduce_dim)
             a_dims.insert(outter_dim, reduce_dim)
-            a = tf.transpose(a, a_dims)
+            a = tf.transpose(a=a, perm=a_dims)
         a_t_shape = a.get_shape()
         a = tf.reshape(a, [-1, int(a_shape[reduce_dim])])
         result = tf.matmul(a, b, transpose_a=transpose_a,
@@ -43,7 +43,7 @@ def gmatmul(a, b, transpose_a=False, transpose_b=False, reduce_dim=None):
             a_dims = list(range(len(a_shape)))
             a_dims.remove(outter_dim)
             a_dims.insert(reduce_dim, outter_dim)
-            result = tf.transpose(result, a_dims)
+            result = tf.transpose(a=result, perm=a_dims)
         return result
 
     elif len(a.get_shape()) == 2 and len(b.get_shape()) == 2:
@@ -58,14 +58,14 @@ def clipoutNeg(vec, threshold=1e-6):
 
 
 def detectMinVal(input_mat, var, threshold=1e-6, name='', debug=False):
-    eigen_min = tf.reduce_min(input_mat)
-    eigen_max = tf.reduce_max(input_mat)
+    eigen_min = tf.reduce_min(input_tensor=input_mat)
+    eigen_max = tf.reduce_max(input_tensor=input_mat)
     eigen_ratio = eigen_max / eigen_min
     input_mat_clipped = clipoutNeg(input_mat, threshold)
 
     if debug:
-        input_mat_clipped = tf.cond(tf.logical_or(tf.greater(eigen_ratio, 0.), tf.less(eigen_ratio, -500)), lambda: input_mat_clipped, lambda: tf.Print(
-            input_mat_clipped, [tf.convert_to_tensor('screwed ratio ' + name + ' eigen values!!!'), tf.convert_to_tensor(var.name), eigen_min, eigen_max, eigen_ratio]))
+        input_mat_clipped = tf.cond(pred=tf.logical_or(tf.greater(eigen_ratio, 0.), tf.less(eigen_ratio, -500)), true_fn=lambda: input_mat_clipped, false_fn=lambda: tf.compat.v1.Print(
+            input_mat_clipped, [tf.convert_to_tensor(value='screwed ratio ' + name + ' eigen values!!!'), tf.convert_to_tensor(value=var.name), eigen_min, eigen_max, eigen_ratio]))
 
     return input_mat_clipped
 

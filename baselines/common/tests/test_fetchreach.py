@@ -5,7 +5,7 @@ from baselines.run import get_learn_function
 from baselines.common.tests.util import reward_per_episode_test
 from baselines.common.tests import mark_slow
 
-pytest.importorskip('mujoco_py')
+pytest.importorskip('mujoco')
 
 common_kwargs = dict(
     network='mlp',
@@ -31,7 +31,7 @@ def test_fetchreach(alg):
     def env_fn():
 
         env = gym.make('FetchReach-v1')
-        env.seed(0)
+        env.reset(seed=0)
         return env
 
     reward_per_episode_test(env_fn, learn_fn, -15)

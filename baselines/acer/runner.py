@@ -16,7 +16,7 @@ class Runner(AbstractEnvRunner):
         self.nbatch = nenv * nsteps
         self.batch_ob_shape = (nenv*(nsteps+1),) + env.observation_space.shape
 
-        self.obs = env.reset()
+        self.obs, _ = env.reset()
         self.obs_dtype = env.observation_space.dtype
         self.ac_dtype = env.action_space.dtype
         self.nstack = self.env.nstack
@@ -33,10 +33,10 @@ class Runner(AbstractEnvRunner):
             mb_actions.append(actions)
             mb_mus.append(mus)
             mb_dones.append(self.dones)
-            obs, rewards, dones, _ = self.env.step(actions)
+            obs, rewards, terminateds, truncateds, _ = self.env.step(actions)
             # states information for statefull models like LSTM
             self.states = states
-            self.dones = dones
+            self.dones = terminateds | truncateds
             self.obs = obs
             mb_rewards.append(rewards)
             enc_obs.append(obs[..., -self.nc:])

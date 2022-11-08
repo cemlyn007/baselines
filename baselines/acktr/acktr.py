@@ -23,36 +23,36 @@ class Model(object):
 
         self.sess = sess = get_session()
         nbatch = nenvs * nsteps
-        with tf.variable_scope('acktr_model', reuse=tf.AUTO_REUSE):
+        with tf.compat.v1.variable_scope('acktr_model', reuse=tf.compat.v1.AUTO_REUSE):
             self.model = step_model = policy(nenvs, 1, sess=sess)
             self.model2 = train_model = policy(nenvs*nsteps, nsteps, sess=sess)
 
         A = train_model.pdtype.sample_placeholder([None])
-        ADV = tf.placeholder(tf.float32, [nbatch])
-        R = tf.placeholder(tf.float32, [nbatch])
-        PG_LR = tf.placeholder(tf.float32, [])
-        VF_LR = tf.placeholder(tf.float32, [])
+        ADV = tf.compat.v1.placeholder(tf.float32, [nbatch])
+        R = tf.compat.v1.placeholder(tf.float32, [nbatch])
+        PG_LR = tf.compat.v1.placeholder(tf.float32, [])
+        VF_LR = tf.compat.v1.placeholder(tf.float32, [])
 
         neglogpac = train_model.pd.neglogp(A)
         self.logits = train_model.pi
 
         ##training loss
-        pg_loss = tf.reduce_mean(ADV*neglogpac)
-        entropy = tf.reduce_mean(train_model.pd.entropy())
+        pg_loss = tf.reduce_mean(input_tensor=ADV*neglogpac)
+        entropy = tf.reduce_mean(input_tensor=train_model.pd.entropy())
         pg_loss = pg_loss - ent_coef * entropy
-        vf_loss = tf.losses.mean_squared_error(tf.squeeze(train_model.vf), R)
+        vf_loss = tf.compat.v1.losses.mean_squared_error(tf.squeeze(train_model.vf), R)
         train_loss = pg_loss + vf_coef * vf_loss
 
 
         ##Fisher loss construction
-        self.pg_fisher = pg_fisher_loss = -tf.reduce_mean(neglogpac)
-        sample_net = train_model.vf + tf.random_normal(tf.shape(train_model.vf))
-        self.vf_fisher = vf_fisher_loss = - vf_fisher_coef*tf.reduce_mean(tf.pow(train_model.vf - tf.stop_gradient(sample_net), 2))
+        self.pg_fisher = pg_fisher_loss = -tf.reduce_mean(input_tensor=neglogpac)
+        sample_net = train_model.vf + tf.random.normal(tf.shape(input=train_model.vf))
+        self.vf_fisher = vf_fisher_loss = - vf_fisher_coef*tf.reduce_mean(input_tensor=tf.pow(train_model.vf - tf.stop_gradient(sample_net), 2))
         self.joint_fisher = joint_fisher_loss = pg_fisher_loss + vf_fisher_loss
 
         self.params=params = find_trainable_variables("acktr_model")
 
-        self.grads_check = grads = tf.gradients(train_loss,params)
+        self.grads_check = grads = tf.gradients(ys=train_loss,xs=params)
 
         with tf.device('/gpu:0'):
             self.optim = optim = kfac.KfacOptimizer(learning_rate=PG_LR, clip_kl=kfac_clip,\
@@ -90,7 +90,7 @@ class Model(object):
         self.step = step_model.step
         self.value = step_model.value
         self.initial_state = step_model.initial_state
-        tf.global_variables_initializer().run(session=sess)
+        tf.compat.v1.global_variables_initializer().run(session=sess)
 
 def learn(network, env, seed, total_timesteps=int(40e6), gamma=0.99, log_interval=100, nprocs=32, nsteps=20,
                  ent_coef=0.01, vf_coef=0.5, vf_fisher_coef=1.0, lr=0.25, max_grad_norm=0.5,

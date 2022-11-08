@@ -15,6 +15,8 @@ def test_env_after_learn(algo):
         env = gym.make('CartPole-v1' if algo == 'acktr' else 'PongNoFrameskip-v4')
         return env
 
+    make_env()
+
     make_session(make_default=True, graph=tf.Graph())
     env = SubprocVecEnv([make_env])
 

@@ -28,7 +28,7 @@ def traj_segment_generator(pi, env, reward_giver, horizon, stochastic):
     new = True
     rew = 0.0
     true_rew = 0.0
-    ob = env.reset()
+    ob, _ = env.reset()
 
     cur_ep_ret = 0
     cur_ep_len = 0
@@ -84,7 +84,7 @@ def traj_segment_generator(pi, env, reward_giver, horizon, stochastic):
             cur_ep_ret = 0
             cur_ep_true_ret = 0
             cur_ep_len = 0
-            ob = env.reset()
+            ob, _ = env.reset()
         t += 1
 
 
@@ -122,22 +122,22 @@ def learn(env, policy_func, reward_giver, expert_dataset, rank,
     ac_space = env.action_space
     pi = policy_func("pi", ob_space, ac_space, reuse=(pretrained_weight != None))
     oldpi = policy_func("oldpi", ob_space, ac_space)
-    atarg = tf.placeholder(dtype=tf.float32, shape=[None])  # Target advantage function (if applicable)
-    ret = tf.placeholder(dtype=tf.float32, shape=[None])  # Empirical return
+    atarg = tf.compat.v1.placeholder(dtype=tf.float32, shape=[None])  # Target advantage function (if applicable)
+    ret = tf.compat.v1.placeholder(dtype=tf.float32, shape=[None])  # Empirical return
 
     ob = U.get_placeholder_cached(name="ob")
     ac = pi.pdtype.sample_placeholder([None])
 
     kloldnew = oldpi.pd.kl(pi.pd)
     ent = pi.pd.entropy()
-    meankl = tf.reduce_mean(kloldnew)
-    meanent = tf.reduce_mean(ent)
+    meankl = tf.reduce_mean(input_tensor=kloldnew)
+    meanent = tf.reduce_mean(input_tensor=ent)
     entbonus = entcoeff * meanent
 
-    vferr = tf.reduce_mean(tf.square(pi.vpred - ret))
+    vferr = tf.reduce_mean(input_tensor=tf.square(pi.vpred - ret))
 
     ratio = tf.exp(pi.pd.logp(ac) - oldpi.pd.logp(ac))  # advantage * pnew / pold
-    surrgain = tf.reduce_mean(ratio * atarg)
+    surrgain = tf.reduce_mean(input_tensor=ratio * atarg)
 
     optimgain = surrgain + entbonus
     losses = [optimgain, meankl, entbonus, surrgain, meanent]
@@ -154,8 +154,8 @@ def learn(env, policy_func, reward_giver, expert_dataset, rank,
 
     get_flat = U.GetFlat(var_list)
     set_from_flat = U.SetFromFlat(var_list)
-    klgrads = tf.gradients(dist, var_list)
-    flat_tangent = tf.placeholder(dtype=tf.float32, shape=[None], name="flat_tan")
+    klgrads = tf.gradients(ys=dist, xs=var_list)
+    flat_tangent = tf.compat.v1.placeholder(dtype=tf.float32, shape=[None], name="flat_tan")
     shapes = [var.get_shape().as_list() for var in var_list]
     start = 0
     tangents = []
@@ -163,10 +163,10 @@ def learn(env, policy_func, reward_giver, expert_dataset, rank,
         sz = U.intprod(shape)
         tangents.append(tf.reshape(flat_tangent[start:start+sz], shape))
         start += sz
-    gvp = tf.add_n([tf.reduce_sum(g*tangent) for (g, tangent) in zipsame(klgrads, tangents)])  # pylint: disable=E1111
+    gvp = tf.add_n([tf.reduce_sum(input_tensor=g*tangent) for (g, tangent) in zipsame(klgrads, tangents)])  # pylint: disable=E1111
     fvp = U.flatgrad(gvp, var_list)
 
-    assign_old_eq_new = U.function([], [], updates=[tf.assign(oldv, newv)
+    assign_old_eq_new = U.function([], [], updates=[tf.compat.v1.assign(oldv, newv)
                                                     for (oldv, newv) in zipsame(oldpi.get_variables(), pi.get_variables())])
     compute_losses = U.function([ob, ac, atarg], losses)
     compute_lossandgrad = U.function([ob, ac, atarg], losses + [U.flatgrad(optimgain, var_list)])
@@ -233,8 +233,8 @@ def learn(env, policy_func, reward_giver, expert_dataset, rank,
         if rank == 0 and iters_so_far % save_per_iter == 0 and ckpt_dir is not None:
             fname = os.path.join(ckpt_dir, task_name)
             os.makedirs(os.path.dirname(fname), exist_ok=True)
-            saver = tf.train.Saver()
-            saver.save(tf.get_default_session(), fname)
+            saver = tf.compat.v1.train.Saver()
+            saver.save(tf.compat.v1.get_default_session(), fname)
 
         logger.log("********** Iteration %i ************" % iters_so_far)
 

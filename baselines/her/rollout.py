@@ -42,7 +42,7 @@ class RolloutWorker:
         self.clear_history()
 
     def reset_all_rollouts(self):
-        self.obs_dict = self.venv.reset()
+        self.obs_dict, _ = self.venv.reset()
         self.initial_o = self.obs_dict['observation']
         self.initial_ag = self.obs_dict['achieved_goal']
         self.g = self.obs_dict['desired_goal']

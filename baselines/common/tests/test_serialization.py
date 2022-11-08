@@ -46,11 +46,12 @@ def test_serialization(learn_fn, network_fn):
 
     def make_env():
         env = MnistEnv(episode_len=100)
-        env.seed(10)
+        env.reset(seed=10)
         return env
 
     env = DummyVecEnv([make_env])
-    ob = env.reset().copy()
+    ob, _ = env.reset()
+    ob = ob.copy()
     learn = get_learn_function(learn_fn)
 
     kwargs = {}
@@ -120,7 +121,7 @@ def test_coexistence(learn_fn, network_fn):
 
 def _serialize_variables():
     sess = get_session()
-    variables = tf.trainable_variables()
+    variables = tf.compat.v1.trainable_variables()
     values = sess.run(variables)
     return {var.name: value for var, value in zip(variables, values)}
 

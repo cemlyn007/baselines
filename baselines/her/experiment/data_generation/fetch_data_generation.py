@@ -15,7 +15,7 @@ def main():
     env.reset()
     print("Reset!")
     while len(actions) < numItr:
-        obs = env.reset()
+        obs, _ = env.reset()
         print("ITERATION NUMBER ", len(actions))
         goToGoal(env, obs)
 

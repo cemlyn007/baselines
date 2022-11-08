@@ -68,7 +68,7 @@ def evaluate_env(env_name, seed, policy_hidden_size, stochastic, reuse, prefix):
         checkpoint_dir = get_checkpoint_dir(checkpoint_list, limit, prefix=prefix)
         checkpoint_path = tf.train.latest_checkpoint(checkpoint_dir)
         env = gym.make(env_name + '-v1')
-        env.seed(seed)
+        env.reset(seed=seed)
         print('Trajectory limitation: {}, Load checkpoint: {}, '.format(limit, checkpoint_path))
         avg_len, avg_ret = run_mujoco.runner(env,
                                              policy_fn,

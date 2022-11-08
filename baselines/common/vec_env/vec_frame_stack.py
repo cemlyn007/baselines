@@ -15,16 +15,16 @@ class VecFrameStack(VecEnvWrapper):
         VecEnvWrapper.__init__(self, venv, observation_space=observation_space)
 
     def step_wait(self):
-        obs, rews, news, infos = self.venv.step_wait()
+        obs, rews, terminateds, truncateds, infos = self.venv.step_wait()
         self.stackedobs = np.roll(self.stackedobs, shift=-1, axis=-1)
-        for (i, new) in enumerate(news):
-            if new:
+        for (i, (term, trunc)) in enumerate(zip(terminateds, truncateds)):
+            if term or trunc:
                 self.stackedobs[i] = 0
         self.stackedobs[..., -obs.shape[-1]:] = obs
-        return self.stackedobs, rews, news, infos
+        return self.stackedobs, rews, terminateds, truncateds, infos
 
     def reset(self):
-        obs = self.venv.reset()
+        obs, info = self.venv.reset()
         self.stackedobs[...] = 0
         self.stackedobs[..., -obs.shape[-1]:] = obs
-        return self.stackedobs
+        return self.stackedobs, info

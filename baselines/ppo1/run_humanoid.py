@@ -61,13 +61,13 @@ def main():
         U.load_state(args.model_path)
         env = make_mujoco_env('Humanoid-v2', seed=0)
 
-        ob = env.reset()
+        ob, _ = env.reset()
         while True:
             action = pi.act(stochastic=False, ob=ob)[0]
-            ob, _, done, _ =  env.step(action)
+            ob, _, terminated, truncated, _ =  env.step(action)
             env.render()
-            if done:
-                ob = env.reset()
+            if terminated or truncated:
+                ob, _ = env.reset()
 
 if __name__ == '__main__':
     main()

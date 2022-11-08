@@ -84,12 +84,12 @@ class DDPG(object):
         self.stage_shapes = stage_shapes
 
         # Create network.
-        with tf.variable_scope(self.scope):
+        with tf.compat.v1.variable_scope(self.scope):
             self.staging_tf = StagingArea(
                 dtypes=[tf.float32 for _ in self.stage_shapes.keys()],
                 shapes=list(self.stage_shapes.values()))
             self.buffer_ph_tf = [
-                tf.placeholder(tf.float32, shape=shape) for shape in self.stage_shapes.values()]
+                tf.compat.v1.placeholder(tf.float32, shape=shape) for shape in self.stage_shapes.values()]
             self.stage_op = self.staging_tf.put(self.buffer_ph_tf)
 
             self._create_network(reuse=reuse)
@@ -304,12 +304,12 @@ class DDPG(object):
         self.buffer.clear_buffer()
 
     def _vars(self, scope):
-        res = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, scope=self.scope + '/' + scope)
+        res = tf.compat.v1.get_collection(tf.compat.v1.GraphKeys.TRAINABLE_VARIABLES, scope=self.scope + '/' + scope)
         assert len(res) > 0
         return res
 
     def _global_vars(self, scope):
-        res = tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES, scope=self.scope + '/' + scope)
+        res = tf.compat.v1.get_collection(tf.compat.v1.GraphKeys.GLOBAL_VARIABLES, scope=self.scope + '/' + scope)
         return res
 
     def _create_network(self, reuse=False):
@@ -317,11 +317,11 @@ class DDPG(object):
         self.sess = tf_util.get_session()
 
         # running averages
-        with tf.variable_scope('o_stats') as vs:
+        with tf.compat.v1.variable_scope('o_stats') as vs:
             if reuse:
                 vs.reuse_variables()
             self.o_stats = Normalizer(self.dimo, self.norm_eps, self.norm_clip, sess=self.sess)
-        with tf.variable_scope('g_stats') as vs:
+        with tf.compat.v1.variable_scope('g_stats') as vs:
             if reuse:
                 vs.reuse_variables()
             self.g_stats = Normalizer(self.dimg, self.norm_eps, self.norm_clip, sess=self.sess)
@@ -336,12 +336,12 @@ class DDPG(object):
         mask = np.concatenate((np.zeros(self.batch_size - self.demo_batch_size), np.ones(self.demo_batch_size)), axis = 0)
 
         # networks
-        with tf.variable_scope('main') as vs:
+        with tf.compat.v1.variable_scope('main') as vs:
             if reuse:
                 vs.reuse_variables()
             self.main = self.create_actor_critic(batch_tf, net_type='main', **self.__dict__)
             vs.reuse_variables()
-        with tf.variable_scope('target') as vs:
+        with tf.compat.v1.variable_scope('target') as vs:
             if reuse:
                 vs.reuse_variables()
             target_batch_tf = batch_tf.copy()
@@ -356,28 +356,28 @@ class DDPG(object):
         target_Q_pi_tf = self.target.Q_pi_tf
         clip_range = (-self.clip_return, 0. if self.clip_pos_returns else np.inf)
         target_tf = tf.clip_by_value(batch_tf['r'] + self.gamma * target_Q_pi_tf, *clip_range)
-        self.Q_loss_tf = tf.reduce_mean(tf.square(tf.stop_gradient(target_tf) - self.main.Q_tf))
+        self.Q_loss_tf = tf.reduce_mean(input_tensor=tf.square(tf.stop_gradient(target_tf) - self.main.Q_tf))
 
         if self.bc_loss ==1 and self.q_filter == 1 : # train with demonstrations and use bc_loss and q_filter both
-            maskMain = tf.reshape(tf.boolean_mask(self.main.Q_tf > self.main.Q_pi_tf, mask), [-1]) #where is the demonstrator action better than actor action according to the critic? choose those samples only
+            maskMain = tf.reshape(tf.boolean_mask(tensor=self.main.Q_tf > self.main.Q_pi_tf, mask=mask), [-1]) #where is the demonstrator action better than actor action according to the critic? choose those samples only
             #define the cloning loss on the actor's actions only on the samples which adhere to the above masks
-            self.cloning_loss_tf = tf.reduce_sum(tf.square(tf.boolean_mask(tf.boolean_mask((self.main.pi_tf), mask), maskMain, axis=0) - tf.boolean_mask(tf.boolean_mask((batch_tf['u']), mask), maskMain, axis=0)))
-            self.pi_loss_tf = -self.prm_loss_weight * tf.reduce_mean(self.main.Q_pi_tf) #primary loss scaled by it's respective weight prm_loss_weight
-            self.pi_loss_tf += self.prm_loss_weight * self.action_l2 * tf.reduce_mean(tf.square(self.main.pi_tf / self.max_u)) #L2 loss on action values scaled by the same weight prm_loss_weight
+            self.cloning_loss_tf = tf.reduce_sum(input_tensor=tf.square(tf.boolean_mask(tensor=tf.boolean_mask(tensor=(self.main.pi_tf), mask=mask), mask=maskMain, axis=0) - tf.boolean_mask(tensor=tf.boolean_mask(tensor=(batch_tf['u']), mask=mask), mask=maskMain, axis=0)))
+            self.pi_loss_tf = -self.prm_loss_weight * tf.reduce_mean(input_tensor=self.main.Q_pi_tf) #primary loss scaled by it's respective weight prm_loss_weight
+            self.pi_loss_tf += self.prm_loss_weight * self.action_l2 * tf.reduce_mean(input_tensor=tf.square(self.main.pi_tf / self.max_u)) #L2 loss on action values scaled by the same weight prm_loss_weight
             self.pi_loss_tf += self.aux_loss_weight * self.cloning_loss_tf #adding the cloning loss to the actor loss as an auxilliary loss scaled by its weight aux_loss_weight
 
         elif self.bc_loss == 1 and self.q_filter == 0: # train with demonstrations without q_filter
-            self.cloning_loss_tf = tf.reduce_sum(tf.square(tf.boolean_mask((self.main.pi_tf), mask) - tf.boolean_mask((batch_tf['u']), mask)))
-            self.pi_loss_tf = -self.prm_loss_weight * tf.reduce_mean(self.main.Q_pi_tf)
-            self.pi_loss_tf += self.prm_loss_weight * self.action_l2 * tf.reduce_mean(tf.square(self.main.pi_tf / self.max_u))
+            self.cloning_loss_tf = tf.reduce_sum(input_tensor=tf.square(tf.boolean_mask(tensor=(self.main.pi_tf), mask=mask) - tf.boolean_mask(tensor=(batch_tf['u']), mask=mask)))
+            self.pi_loss_tf = -self.prm_loss_weight * tf.reduce_mean(input_tensor=self.main.Q_pi_tf)
+            self.pi_loss_tf += self.prm_loss_weight * self.action_l2 * tf.reduce_mean(input_tensor=tf.square(self.main.pi_tf / self.max_u))
             self.pi_loss_tf += self.aux_loss_weight * self.cloning_loss_tf
 
         else: #If  not training with demonstrations
-            self.pi_loss_tf = -tf.reduce_mean(self.main.Q_pi_tf)
-            self.pi_loss_tf += self.action_l2 * tf.reduce_mean(tf.square(self.main.pi_tf / self.max_u))
+            self.pi_loss_tf = -tf.reduce_mean(input_tensor=self.main.Q_pi_tf)
+            self.pi_loss_tf += self.action_l2 * tf.reduce_mean(input_tensor=tf.square(self.main.pi_tf / self.max_u))
 
-        Q_grads_tf = tf.gradients(self.Q_loss_tf, self._vars('main/Q'))
-        pi_grads_tf = tf.gradients(self.pi_loss_tf, self._vars('main/pi'))
+        Q_grads_tf = tf.gradients(ys=self.Q_loss_tf, xs=self._vars('main/Q'))
+        pi_grads_tf = tf.gradients(ys=self.pi_loss_tf, xs=self._vars('main/pi'))
         assert len(self._vars('main/Q')) == len(Q_grads_tf)
         assert len(self._vars('main/pi')) == len(pi_grads_tf)
         self.Q_grads_vars_tf = zip(Q_grads_tf, self._vars('main/Q'))
@@ -399,7 +399,7 @@ class DDPG(object):
             map(lambda v: v[0].assign(self.polyak * v[0] + (1. - self.polyak) * v[1]), zip(self.target_vars, self.main_vars)))
 
         # initialize all variables
-        tf.variables_initializer(self._global_vars('')).run()
+        tf.compat.v1.variables_initializer(self._global_vars('')).run()
         self._sync_optimizers()
         self._init_target_net()
 
@@ -440,7 +440,7 @@ class DDPG(object):
         # load TF variables
         vars = [x for x in self._global_vars('') if 'buffer' not in x.name]
         assert(len(vars) == len(state["tf"]))
-        node = [tf.assign(var, val) for var, val in zip(vars, state["tf"])]
+        node = [tf.compat.v1.assign(var, val) for var, val in zip(vars, state["tf"])]
         self.sess.run(node)
 
     def save(self, save_path):

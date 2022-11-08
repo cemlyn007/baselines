@@ -25,7 +25,7 @@ class Runner(AbstractEnvRunner):
         epinfos = []
         for n in range(self.nsteps):
             # Given observations, take action and value (V(s))
-            # We already have self.obs because Runner superclass run self.obs[:] = env.reset() on init
+            # We already have self.obs because Runner superclass run self.obs[:], _ = env.reset() on init
             actions, values, states, _ = self.model.step(self.obs, S=self.states, M=self.dones)
 
             # Append the experiences
@@ -35,12 +35,12 @@ class Runner(AbstractEnvRunner):
             mb_dones.append(self.dones)
 
             # Take actions in env and look the results
-            obs, rewards, dones, infos = self.env.step(actions)
+            obs, rewards, terminateds, truncateds, infos = self.env.step(actions)
             for info in infos:
                 maybeepinfo = info.get('episode')
                 if maybeepinfo: epinfos.append(maybeepinfo)
             self.states = states
-            self.dones = dones
+            self.dones = terminateds | truncateds
             self.obs = obs
             mb_rewards.append(rewards)
         mb_dones.append(self.dones)

@@ -64,16 +64,16 @@ class Model(object):
         nact = ac_space.n
         nbatch = nenvs * nsteps
 
-        A = tf.placeholder(tf.int32, [nbatch]) # actions
-        D = tf.placeholder(tf.float32, [nbatch]) # dones
-        R = tf.placeholder(tf.float32, [nbatch]) # rewards, not returns
-        MU = tf.placeholder(tf.float32, [nbatch, nact]) # mu's
-        LR = tf.placeholder(tf.float32, [])
+        A = tf.compat.v1.placeholder(tf.int32, [nbatch]) # actions
+        D = tf.compat.v1.placeholder(tf.float32, [nbatch]) # dones
+        R = tf.compat.v1.placeholder(tf.float32, [nbatch]) # rewards, not returns
+        MU = tf.compat.v1.placeholder(tf.float32, [nbatch, nact]) # mu's
+        LR = tf.compat.v1.placeholder(tf.float32, [])
         eps = 1e-6
 
-        step_ob_placeholder = tf.placeholder(dtype=ob_space.dtype, shape=(nenvs,) + ob_space.shape)
-        train_ob_placeholder = tf.placeholder(dtype=ob_space.dtype, shape=(nenvs*(nsteps+1),) + ob_space.shape)
-        with tf.variable_scope('acer_model', reuse=tf.AUTO_REUSE):
+        step_ob_placeholder = tf.compat.v1.placeholder(dtype=ob_space.dtype, shape=(nenvs,) + ob_space.shape)
+        train_ob_placeholder = tf.compat.v1.placeholder(dtype=ob_space.dtype, shape=(nenvs*(nsteps+1),) + ob_space.shape)
+        with tf.compat.v1.variable_scope('acer_model', reuse=tf.compat.v1.AUTO_REUSE):
 
             step_model = policy(nbatch=nenvs, nsteps=1, observ_placeholder=step_ob_placeholder, sess=sess)
             train_model = policy(nbatch=nbatch, nsteps=nsteps, observ_placeholder=train_ob_placeholder, sess=sess)
@@ -93,7 +93,7 @@ class Model(object):
             print(v.name)
             return v
 
-        with tf.variable_scope("acer_model", custom_getter=custom_getter, reuse=True):
+        with tf.compat.v1.variable_scope("acer_model", custom_getter=custom_getter, reuse=True):
             polyak_model = policy(nbatch=nbatch, nsteps=nsteps, observ_placeholder=train_ob_placeholder, sess=sess)
 
         # Notation: (var) = batch variable, (var)s = seqeuence variable, (var)_i = variable index by action at step i
@@ -103,7 +103,7 @@ class Model(object):
         train_model_p = tf.nn.softmax(train_model.pi)
         polyak_model_p = tf.nn.softmax(polyak_model.pi)
         step_model_p = tf.nn.softmax(step_model.pi)
-        v = tf.reduce_sum(train_model_p * train_model.q, axis = -1) # shape is [nenvs * (nsteps + 1)]
+        v = tf.reduce_sum(input_tensor=train_model_p * train_model.q, axis = -1) # shape is [nenvs * (nsteps + 1)]
 
         # strip off last step
         f, f_pol, q = map(lambda var: strip(var, nenvs, nsteps), [train_model_p, polyak_model_p, train_model.q])
@@ -121,7 +121,7 @@ class Model(object):
         # Calculate losses
         # Entropy
         # entropy = tf.reduce_mean(strip(train_model.pd.entropy(), nenvs, nsteps))
-        entropy = tf.reduce_mean(cat_entropy_softmax(f))
+        entropy = tf.reduce_mean(input_tensor=cat_entropy_softmax(f))
 
         # Policy Graident loss, with truncated importance sampling & bias correction
         v = strip(v, nenvs, nsteps, True)
@@ -130,57 +130,57 @@ class Model(object):
 
         # Truncated importance sampling
         adv = qret - v
-        logf = tf.log(f_i + eps)
+        logf = tf.math.log(f_i + eps)
         gain_f = logf * tf.stop_gradient(adv * tf.minimum(c, rho_i))  # [nenvs * nsteps]
-        loss_f = -tf.reduce_mean(gain_f)
+        loss_f = -tf.reduce_mean(input_tensor=gain_f)
 
         # Bias correction for the truncation
         adv_bc = (q - tf.reshape(v, [nenvs * nsteps, 1]))  # [nenvs * nsteps, nact]
-        logf_bc = tf.log(f + eps) # / (f_old + eps)
+        logf_bc = tf.math.log(f + eps) # / (f_old + eps)
         check_shape([adv_bc, logf_bc], [[nenvs * nsteps, nact]]*2)
-        gain_bc = tf.reduce_sum(logf_bc * tf.stop_gradient(adv_bc * tf.nn.relu(1.0 - (c / (rho + eps))) * f), axis = 1) #IMP: This is sum, as expectation wrt f
-        loss_bc= -tf.reduce_mean(gain_bc)
+        gain_bc = tf.reduce_sum(input_tensor=logf_bc * tf.stop_gradient(adv_bc * tf.nn.relu(1.0 - (c / (rho + eps))) * f), axis = 1) #IMP: This is sum, as expectation wrt f
+        loss_bc= -tf.reduce_mean(input_tensor=gain_bc)
 
         loss_policy = loss_f + loss_bc
 
         # Value/Q function loss, and explained variance
         check_shape([qret, q_i], [[nenvs * nsteps]]*2)
         ev = q_explained_variance(tf.reshape(q_i, [nenvs, nsteps]), tf.reshape(qret, [nenvs, nsteps]))
-        loss_q = tf.reduce_mean(tf.square(tf.stop_gradient(qret) - q_i)*0.5)
+        loss_q = tf.reduce_mean(input_tensor=tf.square(tf.stop_gradient(qret) - q_i)*0.5)
 
         # Net loss
         check_shape([loss_policy, loss_q, entropy], [[]] * 3)
         loss = loss_policy + q_coef * loss_q - ent_coef * entropy
 
         if trust_region:
-            g = tf.gradients(- (loss_policy - ent_coef * entropy) * nsteps * nenvs, f) #[nenvs * nsteps, nact]
+            g = tf.gradients(ys=- (loss_policy - ent_coef * entropy) * nsteps * nenvs, xs=f) #[nenvs * nsteps, nact]
             # k = tf.gradients(KL(f_pol || f), f)
             k = - f_pol / (f + eps) #[nenvs * nsteps, nact] # Directly computed gradient of KL divergence wrt f
-            k_dot_g = tf.reduce_sum(k * g, axis=-1)
-            adj = tf.maximum(0.0, (tf.reduce_sum(k * g, axis=-1) - delta) / (tf.reduce_sum(tf.square(k), axis=-1) + eps)) #[nenvs * nsteps]
+            k_dot_g = tf.reduce_sum(input_tensor=k * g, axis=-1)
+            adj = tf.maximum(0.0, (tf.reduce_sum(input_tensor=k * g, axis=-1) - delta) / (tf.reduce_sum(input_tensor=tf.square(k), axis=-1) + eps)) #[nenvs * nsteps]
 
             # Calculate stats (before doing adjustment) for logging.
             avg_norm_k = avg_norm(k)
             avg_norm_g = avg_norm(g)
-            avg_norm_k_dot_g = tf.reduce_mean(tf.abs(k_dot_g))
-            avg_norm_adj = tf.reduce_mean(tf.abs(adj))
+            avg_norm_k_dot_g = tf.reduce_mean(input_tensor=tf.abs(k_dot_g))
+            avg_norm_adj = tf.reduce_mean(input_tensor=tf.abs(adj))
 
             g = g - tf.reshape(adj, [nenvs * nsteps, 1]) * k
             grads_f = -g/(nenvs*nsteps) # These are turst region adjusted gradients wrt f ie statistics of policy pi
-            grads_policy = tf.gradients(f, params, grads_f)
-            grads_q = tf.gradients(loss_q * q_coef, params)
+            grads_policy = tf.gradients(ys=f, xs=params, grad_ys=grads_f)
+            grads_q = tf.gradients(ys=loss_q * q_coef, xs=params)
             grads = [gradient_add(g1, g2, param) for (g1, g2, param) in zip(grads_policy, grads_q, params)]
 
             avg_norm_grads_f = avg_norm(grads_f) * (nsteps * nenvs)
-            norm_grads_q = tf.global_norm(grads_q)
-            norm_grads_policy = tf.global_norm(grads_policy)
+            norm_grads_q = tf.linalg.global_norm(grads_q)
+            norm_grads_policy = tf.linalg.global_norm(grads_policy)
         else:
-            grads = tf.gradients(loss, params)
+            grads = tf.gradients(ys=loss, xs=params)
 
         if max_grad_norm is not None:
             grads, norm_grads = tf.clip_by_global_norm(grads, max_grad_norm)
         grads = list(zip(grads, params))
-        trainer = tf.train.RMSPropOptimizer(learning_rate=LR, decay=rprop_alpha, epsilon=rprop_epsilon)
+        trainer = tf.compat.v1.train.RMSPropOptimizer(learning_rate=LR, decay=rprop_alpha, epsilon=rprop_epsilon)
         _opt_op = trainer.apply_gradients(grads)
 
         # so when you call _train, you first do the gradient step, then you apply ema
@@ -224,7 +224,7 @@ class Model(object):
         self.step = self.step_model.step
 
         self.initial_state = step_model.initial_state
-        tf.global_variables_initializer().run(session=sess)
+        tf.compat.v1.global_variables_initializer().run(session=sess)
 
 
 class Acer():

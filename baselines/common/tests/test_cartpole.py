@@ -34,9 +34,8 @@ def test_cartpole(alg):
 
     learn_fn = lambda e: get_learn_function(alg)(env=e, **kwargs)
     def env_fn():
-
         env = gym.make('CartPole-v0')
-        env.seed(0)
+        env.reset(seed=0)
         return env
 
     reward_per_episode_test(env_fn, learn_fn, 100)

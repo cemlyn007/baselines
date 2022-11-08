@@ -24,8 +24,7 @@ class IdentityEnv(Env):
         for _ in range(self.delay + 1):
             self.q.append(self.action_space.sample())
         self.time = 0
-
-        return self.q[-1]
+        return self.q[-1], {}
 
     def step(self, actions):
         rew = self._get_reward(self.q.popleft(), actions)
@@ -33,8 +32,8 @@ class IdentityEnv(Env):
             rew = 0
         self.q.append(self.action_space.sample())
         self.time += 1
-        done = self.episode_len is not None and self.time >= self.episode_len
-        return self.q[-1], rew, done, {}
+        terminated = self.episode_len is not None and self.time >= self.episode_len
+        return self.q[-1], rew, terminated, False, {}
 
     def seed(self, seed=None):
         self.action_space.seed(seed)

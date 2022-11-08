@@ -39,17 +39,17 @@ class Model(object):
         nbatch = nenvs*nsteps
 
 
-        with tf.variable_scope('a2c_model', reuse=tf.AUTO_REUSE):
+        with tf.compat.v1.variable_scope('a2c_model', reuse=tf.compat.v1.AUTO_REUSE):
             # step_model is used for sampling
             step_model = policy(nenvs, 1, sess)
 
             # train_model is used to train our network
             train_model = policy(nbatch, nsteps, sess)
 
-        A = tf.placeholder(train_model.action.dtype, train_model.action.shape)
-        ADV = tf.placeholder(tf.float32, [nbatch])
-        R = tf.placeholder(tf.float32, [nbatch])
-        LR = tf.placeholder(tf.float32, [])
+        A = tf.compat.v1.placeholder(train_model.action.dtype, train_model.action.shape)
+        ADV = tf.compat.v1.placeholder(tf.float32, [nbatch])
+        R = tf.compat.v1.placeholder(tf.float32, [nbatch])
+        LR = tf.compat.v1.placeholder(tf.float32, [])
 
         # Calculate the loss
         # Total loss = Policy gradient loss - entropy * entropy coefficient + Value coefficient * value loss
@@ -57,10 +57,10 @@ class Model(object):
         # Policy loss
         neglogpac = train_model.pd.neglogp(A)
         # L = A(s,a) * -logpi(a|s)
-        pg_loss = tf.reduce_mean(ADV * neglogpac)
+        pg_loss = tf.reduce_mean(input_tensor=ADV * neglogpac)
 
         # Entropy is used to improve exploration by limiting the premature convergence to suboptimal policy.
-        entropy = tf.reduce_mean(train_model.pd.entropy())
+        entropy = tf.reduce_mean(input_tensor=train_model.pd.entropy())
 
         # Value loss
         vf_loss = losses.mean_squared_error(tf.squeeze(train_model.vf), R)
@@ -72,7 +72,7 @@ class Model(object):
         params = find_trainable_variables("a2c_model")
 
         # 2. Calculate the gradients
-        grads = tf.gradients(loss, params)
+        grads = tf.gradients(ys=loss, xs=params)
         if max_grad_norm is not None:
             # Clip the gradients (normalize)
             grads, grad_norm = tf.clip_by_global_norm(grads, max_grad_norm)
@@ -81,7 +81,7 @@ class Model(object):
         # For instance zip(ABCD, xyza) => Ax, By, Cz, Da
 
         # 3. Make op for one policy and value update step of A2C
-        trainer = tf.train.RMSPropOptimizer(learning_rate=LR, decay=alpha, epsilon=epsilon)
+        trainer = tf.compat.v1.train.RMSPropOptimizer(learning_rate=LR, decay=alpha, epsilon=epsilon)
 
         _train = trainer.apply_gradients(grads)
 
@@ -113,7 +113,7 @@ class Model(object):
         self.initial_state = step_model.initial_state
         self.save = functools.partial(tf_util.save_variables, sess=sess)
         self.load = functools.partial(tf_util.load_variables, sess=sess)
-        tf.global_variables_initializer().run(session=sess)
+        tf.compat.v1.global_variables_initializer().run(session=sess)
 
 
 def learn(

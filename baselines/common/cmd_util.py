@@ -83,7 +83,7 @@ def make_env(env_id, env_type, mpi_rank=0, subrank=0, seed=None, reward_scale=1.
     if flatten_dict_observations and isinstance(env.observation_space, gym.spaces.Dict):
         env = FlattenObservation(env)
 
-    env.seed(seed + subrank if seed is not None else None)
+    env.reset(seed=seed + subrank if seed is not None else None)
     env = Monitor(env,
                   logger_dir and os.path.join(logger_dir, str(mpi_rank) + '.' + str(subrank)),
                   allow_early_resets=True)
@@ -115,7 +115,7 @@ def make_mujoco_env(env_id, seed, reward_scale=1.0):
     env = gym.make(env_id)
     logger_path = None if logger.get_dir() is None else os.path.join(logger.get_dir(), str(rank))
     env = Monitor(env, logger_path, allow_early_resets=True)
-    env.seed(seed)
+    env.reset(seed=seed)
     if reward_scale != 1.0:
         from baselines.common.retro_wrappers import RewardScaler
         env = RewardScaler(env, reward_scale)
@@ -131,7 +131,7 @@ def make_robotics_env(env_id, seed, rank=0):
     env = Monitor(
         env, logger.get_dir() and os.path.join(logger.get_dir(), str(rank)),
         info_keywords=('is_success',))
-    env.seed(seed)
+    env.reset(seed=seed)
     return env
 
 def arg_parser():

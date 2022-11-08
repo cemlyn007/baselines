@@ -107,16 +107,9 @@ class VecEnv(ABC):
         self.step_async(actions)
         return self.step_wait()
 
-    def render(self, mode='human'):
+    def render(self):
         imgs = self.get_images()
-        bigimg = tile_images(imgs)
-        if mode == 'human':
-            self.get_viewer().imshow(bigimg)
-            return self.get_viewer().isopen
-        elif mode == 'rgb_array':
-            return bigimg
-        else:
-            raise NotImplementedError
+        return tile_images(imgs)
 
     def get_images(self):
         """
@@ -131,11 +124,6 @@ class VecEnv(ABC):
         else:
             return self
 
-    def get_viewer(self):
-        if self.viewer is None:
-            from gym.envs.classic_control import rendering
-            self.viewer = rendering.SimpleImageViewer()
-        return self.viewer
 
 class VecEnvWrapper(VecEnv):
     """
@@ -180,12 +168,12 @@ class VecEnvObservationWrapper(VecEnvWrapper):
         pass
 
     def reset(self):
-        obs = self.venv.reset()
-        return self.process(obs)
+        obs, info = self.venv.reset()
+        return self.process(obs), info
 
     def step_wait(self):
-        obs, rews, dones, infos = self.venv.step_wait()
-        return self.process(obs), rews, dones, infos
+        obs, rews, terminateds, truncateds, infos = self.venv.step_wait()
+        return self.process(obs), rews, terminateds, truncateds, infos
 
 class CloudpickleWrapper(object):
     """
